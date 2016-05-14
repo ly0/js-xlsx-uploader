@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>上传</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <!-- 新 Bootstrap 核心 CSS 文件 -->
+    <link rel="stylesheet" href="//cdn.bootcss.com/bootstrap/3.3.5/css/bootstrap.min.css">
+
+    <!-- 可选的Bootstrap主题文件（一般不用引入） -->
+    <link rel="stylesheet" href="//cdn.bootcss.com/bootstrap/3.3.5/css/bootstrap-theme.min.css">
+
+    <!-- jQuery文件。务必在bootstrap.min.js 之前引入 -->
+    <script src="//cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
+
+    <!-- 最新的 Bootstrap 核心 JavaScript 文件 -->
+    <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <script type="text/javascript" src="./xlsx.full.min.js"></script>
+    <script type="text/javascript" src="./mustache.min.js"></script>
+    <style>
+        body {
+            padding-bottom: 50px;
+        }
+        
+        .form-group input[type="file"] {
+            display: inline-block;
+        }
+        
+        .container section {
+            margin-top: 20px;
+        }
+        
+        .container footer .btn {
+            display: block;
+            width: 100%;
+        }
+        
+        .container .table tr:last-of-type span{
+            margin-left: 1em;
+        }
+    </style>
+    <script type="text/javascript">
+        window.config={
+            type:'table',
+            template:'{"doctype":"Item Price","items":[{{#data}}{"name":{{供应商名称*}}},{{/data}}]}'
+        };
+        // window.config={
+        //     type:'row',
+        //     template:'{"doctype":"Item Price","name":{{商家ID*}}}'
+        // };
+    </script>
+    <script type="text/javascript">
+        $(function(){
+            $('#upload').on('change',function(e){
+                e.preventDefault();
+                var file=e.target.files[0];
+                readXlsx(file,function(data){
+                    var workbook=XLSX.read(data,{type: 'binary'});
+                    var list=convertSheetsToJson(workbook);
+                    $('#uploadButton').data('list',list);
+                    $('#fileContent').html(createTableHtml(list,!uploadModeTable(window.config)));
+                });
+                return false;
+            });
+            $('#uploadButton').on('click',function(){
+                var list=$(this).data('list');
+                var $table=$('#fileContent');
+                $(this).prop('disabled',true);
+                if(uploadModeTable(window.config)){
+                    var data=Mustache.render(window.config.template,{data:list});
+                    console.log(data)
+                    $table.find('tr:last-of-type td').html('<span class="text-success">上传成功</span>');
+                }else{
+                    var totalCount=0,successCount=0;
+                    list.forEach(function(item,index){
+                       totalCount++;
+                       var data=Mustache.render(window.config.template,item);
+                       $table.find('tr[data-index="'+index+'"] td:last-of-type')
+                            .html('<span class="text-success">上传成功</span>');
+                       successCount++;
+                       
+                       if(totalCount===list.length){
+                           var html=Mustache.render('<span class="text-success">成功：{{success}}</span><span class="text-danger">失败：{{fail}}</span>',
+                            {success:successCount,fail:totalCount-successCount});
+                           $table.find('tr:last-of-type td').html(html)
+                       }
+                    });
+                }
+            });
+        });
+        
+        var STATUS='@@status';
+        
+        function readXlsx(file,cb){
+            var reader=new FileReader();
+            reader.onload=function(e){
+                cb(e.target.result);
+            }
+            reader.readAsBinaryString(file);
+        }
+        
+        function convertSheetsToJson(workbook){
+            return workbook.SheetNames.map(function(sheetName){
+                return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+            }).reduce(function(result,arrs){
+                return result.concat(arrs);
+            },[]);
+        }
+        
+        function createTableHtml(list,showUpload){
+            if(list.length===0){
+                return '';
+            }
+            var fields=Object.keys(list[0]);
+            showUpload && fields.push(STATUS);
+            var header='<tr><td>序号</td>'+fields.map(function(field){
+                return '<td>'+(field===STATUS?'上传状态':field)+'</td>';
+            }).join('\r\n')+'</tr>';
+            var rows=list.map(function(item,index){
+                return ('<tr data-index="'+index+'">'
+                +'<td>'+(index+1)+'</td>'
+                +fields.map(function(field){
+                    return '<td>'+(field===STATUS?'':item[field])+'</td>';
+                }).join('\r\n')+'</tr>');
+            });
+            var footer='<tr><td colspan="'+(fields.length+1)+'"><span class="text-primary">待上传</span></td></tr>'
+            return [header].concat(rows).concat(footer).join('\r\n');
+        }
+        
+        function uploadModeTable(config){
+            return config.type==='table';
+        }
+    </script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h3>EXCEL上传</h3>
+        </header>
+        <section>
+            <form class="form-inline">
+                <div class="form-group">
+                    <label for="upload">请选择EXCEL文件：</label>
+                    <input id="upload" type="file" name="upload" />
+                </div>
+            </form>
+        </section>
+        <section>
+            <table id='fileContent' class="table table-striped">
+
+            </table>
+        </section>
+        <footer>
+            <button class="btn btn-primary" id="uploadButton">上传</button>
+        </footer>
+    </div>
+</body>
+
+</html>
